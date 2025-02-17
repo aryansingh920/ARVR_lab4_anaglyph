@@ -212,17 +212,82 @@ int main(void)
 			if (anaglyphMode == ToeIn) {
 
 				// TODO: Implement the toe-in projection here
+				// 1) Compute the camera’s right direction
+				glm::vec3 rightDir = glm::normalize(glm::cross(lookat - eyeCenter, up));
+
+				// 2) Shift each eye left/right by half the IPD
+				glm::vec3 leftEyePos = eyeCenter - 0.5f * ipd * rightDir;
+				glm::vec3 rightEyePos = eyeCenter + 0.5f * ipd * rightDir;
+
+				// 3) “Toe in”: each eye rotates to converge on the same lookat point
+				glm::mat4 viewLeft = glm::lookAt(leftEyePos, lookat, up);
+				glm::mat4 viewRight = glm::lookAt(rightEyePos, lookat, up);
+
+				// 4) Use the same perspective projection for both eyes
+				vpLeft = projectionMatrix * viewLeft;
+				vpRight = projectionMatrix * viewRight;
+
 				// ------------------------------------------------------------
 
 
 			} else if (anaglyphMode == Asymmetric) {	
 
 				// TODO: Implement the asymmetric view frustum here
+				float aspect = float(windowWidth) / float(windowHeight);
+				float top = zNear * tan(glm::radians(FoV / 2.0f));
+				float rightVal = top * aspect;
+
+				// Distance from camera to the plane you’re focusing on.
+				// Here, we use “viewDistance” since the camera is ~100 units from the origin.
+				float frustumShift = 0.5f * ipd * (zNear / viewDistance);
+
+				// Compute shared directions
+				glm::vec3 forwardDir = glm::normalize(lookat - eyeCenter);
+				glm::vec3 rightDir = glm::normalize(glm::cross(forwardDir, up));
+
+				// Left eye position (shift by -ipd/2)
+				glm::vec3 leftEyePos = eyeCenter - 0.5f * ipd * rightDir;
+				// Right eye position (shift by +ipd/2)
+				glm::vec3 rightEyePos = eyeCenter + 0.5f * ipd * rightDir;
+
+				// For the left eye, frustum is shifted to the right by “frustumShift”
+				float left_left = -rightVal + frustumShift;
+				float left_right = rightVal + frustumShift;
+				glm::mat4 projLeft = glm::frustum(left_left, left_right, -top, top, zNear, zFar);
+				glm::mat4 viewLeft = glm::lookAt(leftEyePos, leftEyePos + forwardDir, up);
+				vpLeft = projLeft * viewLeft;
+
+				// For the right eye, frustum is shifted left by “frustumShift”
+				float right_left = -rightVal - frustumShift;
+				float right_right = rightVal - frustumShift;
+				glm::mat4 projRight = glm::frustum(right_left, right_right, -top, top, zNear, zFar);
+				glm::mat4 viewRight = glm::lookAt(rightEyePos, rightEyePos + forwardDir, up);
+				vpRight = projRight * viewRight;
+
 				// ------------------------------------------------------------
 
 			}
 
 			// TODO: Implement two-pass rendering to draw the anaglyph
+			// FIRST PASS: Render the Left Eye in Red only
+			glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE); // R only
+			glClear(GL_DEPTH_BUFFER_BIT);					   // Clear depth but keep color
+			for (int i = 0; i < numBoxes; ++i)
+			{
+				box.render(vpLeft, boxTransforms[i]);
+			}
+
+			// SECOND PASS: Render the Right Eye in Cyan (G+B) only
+			glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE); // G+B
+			glClear(GL_DEPTH_BUFFER_BIT);					  // Clear depth again
+			for (int i = 0; i < numBoxes; ++i)
+			{
+				box.render(vpRight, boxTransforms[i]);
+			}
+
+			// Finally, restore normal color masking
+			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
 			// ----------------------------------------------------------------
 			
 		}
