@@ -9,8 +9,14 @@
 
 #include <vector>
 #include <iostream>
-#define _USE_MATH_DEFINES
 #include <math.h>
+#include <models/sphere.h>
+
+#define _USE_MATH_DEFINES
+
+static bool useSphereScene = false; // false => boxes, true => spheres
+
+static Sphere sphere; // The new sphere object
 
 static GLFWwindow *window;
 static int windowWidth = 1024; 
@@ -175,6 +181,8 @@ int main(void)
 	Box box;
 	box.initialize();
 
+	sphere.initialize();
+
 	// Create the scene with a set of boxes represented by their transforms
 	generateScene();
 
@@ -190,22 +198,35 @@ int main(void)
 		// TODO: Render anaglyph 
 		// --------------------------------------------------------------------
 
-		if (anaglyphMode == None) {
+		if (anaglyphMode == None)
+		{
 			// Clear the screen
 			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-			// Set camera view matrix 
+			// Set camera view matrix
 			glm::mat4 viewMatrix = glm::lookAt(eyeCenter, lookat, up);
 			glm::mat4 vp = projectionMatrix * viewMatrix;
-			
-			// Draw 
-			for (int i = 0; i < numBoxes; ++i) {
-				box.render(vp, boxTransforms[i]);
-			}
 
-		} else {
-			
+			// If we’re in sphere scene, render spheres. Otherwise, render boxes.
+			if (!useSphereScene)
+			{
+				for (int i = 0; i < numBoxes; ++i)
+				{
+					box.render(vp, boxTransforms[i]);
+				}
+			}
+			else
+			{
+				for (int i = 0; i < numBoxes; ++i)
+				{
+					sphere.render(vp, boxTransforms[i]);
+				}
+			}
+		}
+		else
+		{
+
 			glm::mat4 vpLeft;
 			glm::mat4 vpRight;
 
@@ -272,24 +293,50 @@ int main(void)
 			// FIRST PASS: Render the Left Eye in Red only
 			glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_TRUE); // R only
 			glClear(GL_DEPTH_BUFFER_BIT);					   // Clear depth but keep color
-			for (int i = 0; i < numBoxes; ++i)
+			if (!useSphereScene)
 			{
-				box.render(vpLeft, boxTransforms[i]);
+				// BOX RENDER
+				for (int i = 0; i < numBoxes; ++i)
+				{
+					box.render(vpLeft, boxTransforms[i]);
+				}
+			}
+			else
+			{
+				// SPHERE RENDER
+				// Note: you can re-use boxTransforms for the sphere's positions/scales
+				// or define a separate sphereTransforms if you prefer.
+				for (int i = 0; i < numBoxes; ++i)
+				{
+					sphere.render(vpLeft, boxTransforms[i]);
+				}
 			}
 
 			// SECOND PASS: Render the Right Eye in Cyan (G+B) only
+			// SECOND PASS: Render the Right Eye in Cyan (G+B) only
 			glColorMask(GL_FALSE, GL_TRUE, GL_TRUE, GL_TRUE); // G+B
 			glClear(GL_DEPTH_BUFFER_BIT);					  // Clear depth again
-			for (int i = 0; i < numBoxes; ++i)
+			if (!useSphereScene)
 			{
-				box.render(vpRight, boxTransforms[i]);
+				// BOX RENDER
+				for (int i = 0; i < numBoxes; ++i)
+				{
+					box.render(vpRight, boxTransforms[i]);
+				}
+			}
+			else
+			{
+				// SPHERE RENDER
+				for (int i = 0; i < numBoxes; ++i)
+				{
+					sphere.render(vpRight, boxTransforms[i]);
+				}
 			}
 
 			// Finally, restore normal color masking
 			glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
 			// ----------------------------------------------------------------
-			
 		}
 
 		// --------------------------------------------------------------------
@@ -314,6 +361,7 @@ int main(void)
 	while (!glfwWindowShouldClose(window));
 
 	// Clean up
+	sphere.cleanup();
 	box.cleanup();
 
 	// Close OpenGL window and terminate GLFW
@@ -393,6 +441,25 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 	if (key == GLFW_KEY_0) {
 		numBoxes = 100;
 		generateScene();
+	}
+
+	// Press '2' to toggle sphere mode
+	if (key == GLFW_KEY_2 && action == GLFW_PRESS)
+	{
+		useSphereScene = !useSphereScene;
+		if (useSphereScene)
+		{
+			std::cout << "Switched to Sphere scene.\n";
+			// If you want to regenerate a random sphere scene
+			// or re-use the same transforms, do it here:
+			generateScene();
+			// Or create a separate generateSphereScene() if you want different logic
+		}
+		else
+		{
+			std::cout << "Switched to Box scene.\n";
+			generateScene();
+		}
 	}
 
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
